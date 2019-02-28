@@ -42,7 +42,6 @@ Options:
 """
 
 import os
-import docopt
 import argparse
 import PIL
 import sys 
