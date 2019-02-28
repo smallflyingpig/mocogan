@@ -43,13 +43,17 @@ Options:
 
 import os
 import docopt
+import argparse
 import PIL
+import sys 
 
 import functools
 
 import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms
+
+sys.path.append(os.getcwd())
 
 import models
 
@@ -77,15 +81,41 @@ def video_transform(video, image_transform):
     return vid
 
 
-if __name__ == "__main__":
-    args = docopt.docopt(__doc__)
-    print args
+def arg_parser():
+    parser = argparse.ArgumentParser("mocogan")
+    parser.add_argument("--image_dataset", type=str, help="specifies a separate dataset to train for images [default: ]")
+    parser.add_argument("--image_batch", type=int, default=32, help="number of images in image batch [default: 32]")
+    parser.add_argument("--video_batch", type=int, default=32, help="number of videos in video batch [default: 32]")
+    parser.add_argument("--image_size", type=int, default=64, help="resize all frames to this size [default: 64]")
+    parser.add_argument("--use_infogan", action='store_true', default=False, help="when specified infogan loss is used")
+    parser.add_argument("--use_categories", action='store_true', default=False, help="when specified ground truth categories are used to train CategoricalVideoDiscriminator")
+    parser.add_argument("--use_noise", action='store_true', default=False, help="when specified instance noise is used")
+    parser.add_argument("--noise_sigma", type=float, default=0, help="when use_noise is specified, noise_sigma controls the magnitude of the noise [default: 0]")
+    parser.add_argument("--image_discriminator", type=str, help="specifies image disciminator type (see models.py for a list of available models) [default: PatchImageDiscriminator]")
+    parser.add_argument("--video_discriminator", type=str, help="specifies video discriminator type (see models.py for a list of available models) [default: CategoricalVideoDiscriminator]")
+    parser.add_argument("--video_length", type=int, default=16, help="length of the video [default: 16]")
+    parser.add_argument("--print_every", type=int, default=1, help="print every iterations [default: 1]")
+    parser.add_argument("--save_every", type=int, default=1, help="save generator every iterations [default: 1]")
+    parser.add_argument("--n_channels", type=int, default=3, help="number of channels in the input data [default: 3]")
+    parser.add_argument("--every_nth", type=int, default=4, help="sample training videos using every nth frame [default: 4]")
+    parser.add_argument("--batches", type=int, default=100000, help="specify number of batches to train [default: 100000]")
+    parser.add_argument("--dim_z_content", type=int, default=50, help="dimensionality of the content input, ie hidden space [default: 50]")
+    parser.add_argument("--dim_z_motion", type=int, default=10, help="dimensionality of the motion input [default: 10]")
+    parser.add_argument("--dim_z_category", type=int, default=6, help="dimensionality of categorical input [default: 6]")
+    parser.add_argument("--dataset", type=str, help='path for dataset')
+    parser.add_argument("--log_folder", type=str, help='log folder')
+    args = parser.parse_args()
+    return args
 
-    n_channels = int(args['--n_channels'])
+if __name__ == "__main__":
+    args = arg_parser()
+    print(args)
+
+    n_channels = int(args.n_channels)
 
     image_transforms = transforms.Compose([
         PIL.Image.fromarray,
-        transforms.Scale(int(args["--image_size"])),
+        transforms.Scale(int(args.image_size)),
         transforms.ToTensor(),
         lambda x: x[:n_channels, ::],
         transforms.Normalize((0.5, 0.5, .5), (0.5, 0.5, 0.5)),
@@ -93,15 +123,15 @@ if __name__ == "__main__":
 
     video_transforms = functools.partial(video_transform, image_transform=image_transforms)
 
-    video_length = int(args['--video_length'])
-    image_batch = int(args['--image_batch'])
-    video_batch = int(args['--video_batch'])
+    video_length = int(args.video_length)
+    image_batch = int(args.image_batch)
+    video_batch = int(args.video_batch)
 
-    dim_z_content = int(args['--dim_z_content'])
-    dim_z_motion = int(args['--dim_z_motion'])
-    dim_z_category = int(args['--dim_z_category'])
+    dim_z_content = int(args.dim_z_content)
+    dim_z_motion = int(args.dim_z_motion)
+    dim_z_category = int(args.dim_z_category)
 
-    dataset = data.VideoFolderDataset(args['<dataset>'], cache=os.path.join(args['<dataset>'], 'local.db'))
+    dataset = data.VideoFolderDataset(args.dataset, cache=os.path.join(args.dataset, 'local.db'))
     image_dataset = data.ImageDataset(dataset, image_transforms)
     image_loader = DataLoader(image_dataset, batch_size=image_batch, drop_last=True, num_workers=2, shuffle=True)
 
@@ -110,12 +140,12 @@ if __name__ == "__main__":
 
     generator = models.VideoGenerator(n_channels, dim_z_content, dim_z_category, dim_z_motion, video_length)
 
-    image_discriminator = build_discriminator(args['--image_discriminator'], n_channels=n_channels,
-                                              use_noise=args['--use_noise'], noise_sigma=float(args['--noise_sigma']))
+    image_discriminator = build_discriminator(args.image_discriminator, n_channels=n_channels,
+                                              use_noise=args.use_noise, noise_sigma=float(args.noise_sigma))
 
-    video_discriminator = build_discriminator(args['--video_discriminator'], dim_categorical=dim_z_category,
-                                              n_channels=n_channels, use_noise=args['--use_noise'],
-                                              noise_sigma=float(args['--noise_sigma']))
+    video_discriminator = build_discriminator(args.video_discriminator, dim_categorical=dim_z_category,
+                                              n_channels=n_channels, use_noise=args.use_noise,
+                                              noise_sigma=float(args.noise_sigma))
 
     if torch.cuda.is_available():
         generator.cuda()
@@ -123,11 +153,12 @@ if __name__ == "__main__":
         video_discriminator.cuda()
 
     trainer = Trainer(image_loader, video_loader,
-                      int(args['--print_every']),
-                      int(args['--batches']),
-                      args['<log_folder>'],
+                      int(args.print_every),
+                      int(args.save_every),
+                      int(args.batches),
+                      args.log_folder,
                       use_cuda=torch.cuda.is_available(),
-                      use_infogan=args['--use_infogan'],
-                      use_categories=args['--use_categories'])
+                      use_infogan=args.use_infogan,
+                      use_categories=args.use_categories)
 
     trainer.train(generator, image_discriminator, video_discriminator)

@@ -44,7 +44,7 @@ def one_hot_to_class(tensor):
 
 
 class Trainer(object):
-    def __init__(self, image_sampler, video_sampler, log_interval, train_batches, log_folder, use_cuda=False,
+    def __init__(self, image_sampler, video_sampler, log_interval, save_interval, train_batches, log_folder, use_cuda=False,
                  use_infogan=True, use_categories=True):
 
         self.use_categories = use_categories
@@ -59,6 +59,7 @@ class Trainer(object):
         self.image_batch_size = self.image_sampler.batch_size
 
         self.log_interval = log_interval
+        self.save_interval = save_interval
         self.train_batches = train_batches
 
         self.log_folder = log_folder
@@ -131,7 +132,7 @@ class Trainer(object):
         batch_idx, batch = next(self.image_enumerator)
         b = batch
         if self.use_cuda:
-            for k, v in batch.iteritems():
+            for k, v in batch.items():
                 b[k] = v.cuda()
 
         if batch_idx == len(self.image_sampler) - 1:
@@ -146,7 +147,7 @@ class Trainer(object):
         batch_idx, batch = next(self.video_enumerator)
         b = batch
         if self.use_cuda:
-            for k, v in batch.iteritems():
+            for k, v in batch.items():
                 b[k] = v.cuda()
 
         if batch_idx == len(self.video_sampler) - 1:
@@ -271,22 +272,22 @@ class Trainer(object):
                                          sample_fake_image_batch, sample_fake_video_batch,
                                          opt_generator)
 
-            logs['l_gen'] += l_gen.data[0]
+            logs['l_gen'] += l_gen.item()
 
-            logs['l_image_dis'] += l_image_dis.data[0]
-            logs['l_video_dis'] += l_video_dis.data[0]
+            logs['l_image_dis'] += l_image_dis.item()
+            logs['l_video_dis'] += l_video_dis.item()
 
             batch_num += 1
 
             if batch_num % self.log_interval == 0:
 
                 log_string = "Batch %d" % batch_num
-                for k, v in logs.iteritems():
+                for k, v in logs.items():
                     log_string += " [%s] %5.3f" % (k, v / self.log_interval)
 
                 log_string += ". Took %5.2f" % (time.time() - start_time)
 
-                print log_string
+                print(log_string)
 
                 for tag, value in logs.items():
                     logger.scalar_summary(tag, value / self.log_interval, batch_num)
@@ -301,7 +302,7 @@ class Trainer(object):
 
                 videos, _ = sample_fake_video_batch(self.video_batch_size)
                 logger.video_summary("Videos", videos_to_numpy(videos), batch_num)
-
+            if batch_num % self.save_interval == 0:
                 torch.save(generator, os.path.join(self.log_folder, 'generator_%05d.pytorch' % batch_num))
 
             if batch_num >= self.train_batches:

@@ -1,0 +1,16 @@
+python train.py  \
+    --image_batch 32 \
+    --video_batch 32 \
+    --use_infogan \
+    --use_noise \
+    --noise_sigma 0.1 \
+    --image_discriminator PatchImageDiscriminator \
+    --video_discriminator CategoricalVideoDiscriminator \
+    --print_every 1 \
+    --save_every 2 \
+    --every_nth 2 \
+    --dim_z_content 50 \
+    --dim_z_motion 10 \
+    --dim_z_category 4 \
+    --dataset ../data/actions \
+    --log_folder ../logs/actions
